@@ -1,0 +1,95 @@
+variable        NSTEPS          equal 20000
+variable        NSTEPS_EQUI     equal 500000
+variable        THERMO_FREQ     equal 100
+variable        DUMP_FREQ       equal 10000
+variable	TEMP_SOLID	equal 3500
+variable	TEMP_LIQUID	equal 4800
+variable	TEMP_SET	equal ${TEMP_SOLID}
+variable        TEMP_EQUI     	equal 4100
+variable        TAU_T           equal 0.1
+variable        TAU_P           equal 0.5
+
+units           metal
+boundary        p p p
+atom_style      atomic
+
+neighbor        1.0 bin
+
+#box          	tilt large
+read_data	init_conf.lmp
+
+region		solid block INF INF INF INF 10 INF units box
+region		liquid block INF INF INF INF INF 10 units box
+group		liquid region liquid
+group		solid region solid
+
+mass            1 12.011
+mass            2 47.867
+mass            3 91.224
+mass            4 178.490
+mass            5 50.9415
+mass            6 92.90638
+mass            7 180.948
+mass            8 51.9961
+mass            9 95.94
+mass            10 183.84
+mass            11 14.007
+
+
+#plugin          load libdeepmd_lmp.so
+#pair_style      hybrid/overlay zbl 0.1 1.1 deepmd HTCN_C.pb
+#pair_coeff      * * zbl 7.0 7.0
+#pair_coeff      * * deepmd HTCN_C.pb
+
+pair_style      deepmd HTCN_C.pb
+pair_coeff      * *
+
+timestep        0.001
+
+compute		Ts solid temp
+compute		Tl liquid temp
+thermo_style    custom step temp pe ke press vol lx ly lz c_Ts c_Tl
+thermo          ${THERMO_FREQ}
+dump            1 all custom ${DUMP_FREQ} traj.lammps id type x y z vx vy vz
+
+log		log.equisolid
+velocity        all create ${TEMP_SET} 229975
+fix             equisolid all npt temp ${TEMP_SOLID} ${TEMP_SOLID} ${TAU_T} iso 0 0 ${TAU_P} 
+run		${NSTEPS}
+unfix		equisolid
+
+velocity        all scale ${TEMP_LIQUID}
+log		log.liquid
+velocity 	solid set 0.0 0.0 0.0
+fix 		freezesolid solid setforce 0.0 0.0 0.0
+fix             melting liquid npt temp ${TEMP_LIQUID} ${TEMP_LIQUID} ${TAU_T} aniso 0 0 ${TAU_P} couple xy
+run             ${NSTEPS}
+unfix           freezesolid
+unfix		melting
+
+
+#timestep	0.002
+#velocity 	all scale ${TEMP_EQUI}
+velocity        all create ${TEMP_EQUI} 229975
+
+fix             equi all npt temp ${TEMP_EQUI} ${TEMP_EQUI} ${TAU_T} iso 0 0 ${TAU_P}
+run             ${NSTEPS}
+unfix           equi
+
+fix             equi all npt temp ${TEMP_EQUI} ${TEMP_EQUI} ${TAU_T} iso 0 0 ${TAU_P}
+run             ${NSTEPS}
+unfix           equi
+
+
+log		log.equi
+fix             equi all npt temp ${TEMP_EQUI} ${TEMP_EQUI} ${TAU_T} aniso 0 0 ${TAU_P} couple xy 
+run             ${NSTEPS_EQUI}
+unfix           equi
+
+#log		log.min
+#minimize	1.0e-8 1.0e-10 1000 10000
+
+
+
+
+
